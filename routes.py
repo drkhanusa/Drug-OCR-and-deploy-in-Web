@@ -4,9 +4,21 @@ from flask import (
     redirect,
     flash,
     url_for,
-    session
+    request,
+    session,
+    jsonify
 )
-
+import base64
+import urllib.request
+from werkzeug.utils import secure_filename
+from io import BytesIO
+from sqlalchemy.sql import func
+from flask_sqlalchemy import SQLAlchemy 
+import datetime
+import os
+import sys
+sys.path.insert(1, '/projects/khanhnt/PaddleOCR')
+from paddleocr import PaddleOCR,draw_ocr
 from datetime import timedelta
 from sqlalchemy.exc import (
     IntegrityError,
@@ -16,10 +28,7 @@ from sqlalchemy.exc import (
     InvalidRequestError,
 )
 from werkzeug.routing import BuildError
-
-
 from flask_bcrypt import Bcrypt,generate_password_hash, check_password_hash
-
 from flask_login import (
     UserMixin,
     login_user,
@@ -28,17 +37,19 @@ from flask_login import (
     logout_user,
     login_required,
 )
-
 from app import create_app,db,login_manager,bcrypt
 from models import User
 from forms import login_form,register_form
 
+ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'])
+app = create_app()
+ocr = PaddleOCR(use_angle_cls=True, lang='en')
+def allowed_file(filename):
+	return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-app = create_app()
 
 @app.before_request
 def session_handler():
@@ -47,8 +58,58 @@ def session_handler():
 
 @app.route("/", methods=("GET", "POST"), strict_slashes=False)
 def index():
-    return render_template("index.html",title="Home")
+    # render_template('index2.html')
+    return render_template('index.html')
 
+@app.route("/predict", methods=['POST'])
+def predict():
+    if 'files[]' not in request.files:
+        resp = jsonify({'message' : 'No file part in the request'})
+        resp.status_code = 400
+        return resp
+    files = request.files.getlist('files[]')
+    errors = {}
+    success = False
+    line = []
+    for file in files:
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            encoded_image = base64.b64encode(file.read())
+            decoded_image = base64.b64decode(encoded_image)
+            result = ocr.ocr(decoded_image, cls = True)
+            for i in range(len(result)):
+                line.append(result[i][1][0])
+            success = True
+        else: 
+            errors[file.filename] = 'File type is not allowed'
+    if success and errors:
+        errors['message'] = 'File(s) successfully uploaded'
+        resp = jsonify(errors)
+        resp.status_code = 206
+        return resp
+    if success:
+        resp = jsonify({'message': line})
+        resp.status_code = 201
+        return resp
+    else:
+        resp = jsonify(errors)
+        resp.status_code = 400
+        return resp
+
+@app.route('/camera', methods=['POST','GET'])
+def camera():
+	return render_template('camera.html')
+
+@app.route('/captured', methods=['POST'])
+def captured():
+	line = []
+	data = request.get_json()
+	image = base64.b64decode(data.split(",")[1])
+	result = ocr.ocr(image, cls=True)
+	for i in range(len(result)):
+		line.append(result[i][1][0])
+	resp = jsonify({'message' : line})
+	return resp
 
 @app.route("/login/", methods=("GET", "POST"), strict_slashes=False)
 def login():
@@ -71,8 +132,6 @@ def login():
         title="Login",
         btn_action="Login"
         )
-
-
 
 # Register route
 @app.route("/register/", methods=("GET", "POST"), strict_slashes=False)
@@ -127,5 +186,5 @@ def logout():
     return redirect(url_for('login'))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)

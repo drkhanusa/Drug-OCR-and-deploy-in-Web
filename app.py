@@ -11,6 +11,7 @@ from flask_login import (
     logout_user,
     login_required,
 )
+from flask_cors import CORS
 
 login_manager = LoginManager()
 login_manager.session_protection = "strong"
@@ -20,6 +21,7 @@ login_manager.login_message_category = "info"
 db = SQLAlchemy()
 migrate = Migrate()
 bcrypt = Bcrypt()
+UPLOAD_FOLDER = '/projects/khanhnt/Ajax Flask/static'
 
 
 def create_app():
@@ -28,7 +30,8 @@ def create_app():
     app.secret_key = 'secret-key'
     app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///database.db"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
-
+    app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+    CORS(app)
     login_manager.init_app(app)
     db.init_app(app)
     migrate.init_app(app, db)

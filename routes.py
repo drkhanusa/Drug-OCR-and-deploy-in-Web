@@ -1,3 +1,7 @@
+from difflib import SequenceMatcher
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+import sqlite3
 from flask import (
     Flask,
     render_template,
@@ -16,9 +20,8 @@ from sqlalchemy.sql import func
 from flask_sqlalchemy import SQLAlchemy 
 import datetime
 import os
-import sys
-sys.path.insert(1, '/projects/khanhnt/PaddleOCR')
-from paddleocr import PaddleOCR,draw_ocr
+from ocr import ocr_drug
+# from paddleocr import PaddleOCR,draw_ocr
 from datetime import timedelta
 from sqlalchemy.exc import (
     IntegrityError,
@@ -37,15 +40,20 @@ from flask_login import (
     logout_user,
     login_required,
 )
-from app import create_app,db,login_manager,bcrypt
-from models import User
+from app import create_app, db, login_manager,bcrypt
+from models import User, Note
 from forms import login_form,register_form
+import numpy as np
+import cv2
+from PIL import Image
+from io import BytesIO
+from function import create_note, delete_note, update_note, read_notes 
 
 ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'])
 app = create_app()
-ocr = PaddleOCR(use_angle_cls=True, lang='en')
+# ocr = PaddleOCR(use_angle_cls=True, lang='en')
 def allowed_file(filename):
-	return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -63,6 +71,12 @@ def index():
 
 @app.route("/predict", methods=['POST'])
 def predict():
+    conn = sqlite3.connect('database.db')
+    cursor = conn.execute(f"SELECT text from note WHERE username_id = {current_user.id}")
+    allergy_list = [] #TODO: allergy_list
+    for row in cursor:
+        allergy_list.append(row[0])
+    conn.close()
     if 'files[]' not in request.files:
         resp = jsonify({'message' : 'No file part in the request'})
         resp.status_code = 400
@@ -70,25 +84,30 @@ def predict():
     files = request.files.getlist('files[]')
     errors = {}
     success = False
-    line = []
+    
+    allergy_result = []
     for file in files:
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             encoded_image = base64.b64encode(file.read())
             decoded_image = base64.b64decode(encoded_image)
-            result = ocr.ocr(decoded_image, cls = True)
-            for i in range(len(result)):
-                line.append(result[i][1][0])
+            
+            ocr_result = ocr_drug(decoded_image) #, cls = True)
+            for i in range(len(ocr_result)):
+                ingredient = ocr_result[i][1][0].lower()
+                allergy_status = 'Safe'
+                for element in allergy_list:
+                    score = similar(ingredient, element)
+                    if score >= 0.7:
+                        allergy_status = 'Allergy'
+                        break
+                allergy_result.append([ingredient, allergy_status, str(encoded_image)])
+                        
             success = True
         else: 
             errors[file.filename] = 'File type is not allowed'
-    if success and errors:
-        errors['message'] = 'File(s) successfully uploaded'
-        resp = jsonify(errors)
-        resp.status_code = 206
-        return resp
     if success:
-        resp = jsonify({'message': line})
+        resp = jsonify({'drug_list': allergy_result})
         resp.status_code = 201
         return resp
     else:
@@ -98,18 +117,52 @@ def predict():
 
 @app.route('/camera', methods=['POST','GET'])
 def camera():
-	return render_template('camera.html')
+    return render_template('camera.html')
 
 @app.route('/captured', methods=['POST'])
 def captured():
-	line = []
-	data = request.get_json()
-	image = base64.b64decode(data.split(",")[1])
-	result = ocr.ocr(image, cls=True)
-	for i in range(len(result)):
-		line.append(result[i][1][0])
-	resp = jsonify({'message' : line})
-	return resp
+    conn = sqlite3.connect('database.db')
+    cursor = conn.execute(f"SELECT text from note WHERE username_id = {current_user.id}")
+    allergy_list = []
+    allergy_result = []
+    for row in cursor:
+        allergy_list.append(row[0])
+    conn.close()
+    data = request.get_json()
+    image = base64.b64decode(data.split(",")[1])
+    result = ocr_drug(image) #, cls=True)
+    for i in range(len(result)):
+        ingredient = result[i][1][0].lower()
+        allergy_status = 'Safe'
+        for element in allergy_list:
+            score = similar(ingredient, element)
+            if score >= 0.6:
+                allergy_status = 'Allergy'
+                break
+        allergy_result.append([ingredient, allergy_status])
+    
+    resp = jsonify({'message' : allergy_result})
+    return resp
+
+@app.route("/list", methods=["POST", "GET"])
+def listed():
+    if request.method == "POST":
+        data = request.get_json()
+        if data.split(" ")[0] == 'add':
+            create_note(data[3:])
+        elif data.split(" ")[0]== 'delete':
+            delete_note(data[7:])
+        database = Note.query.all()
+    return render_template("todolist.html", database = read_notes())
+
+# @app.route("/edit/<note_id>", methods=["POST", "GET"])
+# def edit_note(note_id):
+#     if request.method == "POST":
+#         update_note(note_id, text=request.form['text'], done=request.form['done'])
+#     elif request.method == "GET":
+#         delete_note(note_id)
+#     return redirect("/ingredient", code=302)
+
 
 @app.route("/login/", methods=("GET", "POST"), strict_slashes=False)
 def login():
@@ -148,9 +201,9 @@ def register():
                 email=email,
                 pwd=bcrypt.generate_password_hash(pwd),
             )
-    
             db.session.add(newuser)
             db.session.commit()
+
             flash(f"Account Succesfully created", "success")
             return redirect(url_for("login"))
 

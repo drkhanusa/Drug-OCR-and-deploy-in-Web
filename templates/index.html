@@ -8,34 +8,44 @@
     <h1>Welcome {{ current_user.username }}</h1>
     <h1>Please upload your image</h1>
     <html lang="en">
-    <!-- <head>
-        <meta charset="UTF-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=2.0">
-        <title>Detect Drug Ingredient</title>
-        <style>
-            body {
-            margin: 0;
-            }
-    
-            .center {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 80vh;
-            }
-        </style>
-    </head> -->
-    <!-- <body>
-        <div class="center">
-            <form id="form" method="POST" action="/" enctype="multipart/form-data">
-                <input type="file" name="file">
-                <button type="submit" name="button">Submit</button>
-            </form>
-        </div> -->
-        
     <head>
         <title>Drug Detect Ingredients</title>
+        <style>
+            #tableResults {
+              font-family: Arial, Helvetica, sans-serif;
+              border-collapse: collapse;
+              width: 50%;
+            }
+            
+            #tableResults td, #tableResults th {
+              border: 1px solid #ddd;
+              padding: 8px;
+            }
+            
+            #tableResults tr:nth-child(even){background-color: #f2f2f2;}
+            
+            #tableResults tr:hover {background-color: #ddd;}
+            
+            #tableResults th {
+              padding-top: 12px;
+              padding-bottom: 12px;
+              text-align: left;
+              background-color: #04AA6D;
+              color: white;
+              height: 10vh
+            }
+        </style>
+        <style>
+            #photo {
+                width: 500px;
+                height: 200px;
+                /* background-color: rgb(0, 98, 128); */
+                object-fit: none;
+                object-position: right top;
+                /* String value */
+            }
+        </style>
+        <img id="photo" alt="The result will appear in this box.">
         <script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
         <script type="text/javascript">
             $(document).ready(function (e) {
@@ -62,20 +72,48 @@
                         type: 'post',
                         success: function (response) { // display success response
                             $('#msg').html('');
-                            $.each(response, function (key, data) {							
-                                if(key !== 'message') {
-                                    $('#msg').append(key + ' -> ' + data + '<br/>');
-                                } else {
-                                    $('#msg').append(data + '<br/>');
+                            $.each(response, function (key, data) {
+                                console.log(data[0][2].length)
+                                var image = document.getElementById("photo");
+                                img.src = src;
+                                img.width = width;
+                                img.height = height;
+                                img.alt = alt;
+                                let base64string = data[0][2].slice(2,data[0][2].length-1)
+                                image.src = "data:image/png;base64,"+base64string;
+                                document.body.appendChild(image);
+                                // for (let i = 0; i < data.length; i++) {
+                                //     resultEle.innerHTML = data[i][2]
+                                // }
+                                document.getElementById('tableResults').innerHTML = '';
+                                var table = document.getElementById("tableResults");// TODO: tableResults
+                                var rowss = table.insertRow();
+                                var cell1s = rowss.insertCell(0);
+                                var cell2s = rowss.insertCell(1);
+                                cell1s.innerHTML = 'Ingredient Drug';
+                                cell2s.innerHTML = 'Allergy medicine ingredients';
+                                for (let i = 0; i < data.length; i++) {
+                                    var row = table.insertRow();
+                                    var cell1 = row.insertCell(0);
+                                    var cell2 = row.insertCell(1);
+                                    cell1.innerHTML = data[i][0];
+                                    cell2.innerHTML = data[i][1];
                                 }
+                                
+                                // if(key !== 'message') {
+                                //     $('#msg').append(key + ' -> ' + data + '<br/>');
+                                // } else {
+                                //     $('#msg').append(data + '<br/>');
+                                // }
                             })
                         },
-                        error: function (response) {
-                            $('#msg').html(response.message); // display error response
-                        }
+                        // error: function (response) {
+                        //     $('#msg').html(response.message); // display error response
+                        // }
                     });
                 });
             });
+            
         </script>
         <style>
             body {
@@ -86,12 +124,11 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 80vh;
+            height: 40vh;
             }
         </style>
     </head>
     <body>
-        <!-- <h2>Python Flask File(s) Upload - Select file(s) to upload</h2> -->
         <div class="center">
             <dl>
                 <p>
@@ -100,12 +137,49 @@
                     <button id="upload">Submit</button>
                 </p>
             </dl>
-        </div>
+    </div>
+<!-- <style>
+    table, td {
+        border: 1px solid black;
+    }
+    </style>
+    </head>
+    <body> -->
+    
+    <table id="tableResults">
+        <tr>
+        <td>Ingredient Drug</td>
+        <td>Allergy medicine ingredients</td>
+        </tr>
+    </table>
+    <br>
+    
+    <!-- <button type="button" onclick="myFunction()">Try it</button> -->
+    
+    <!-- <script>
+    // console.log(function(response))
+    function myFunction() {
+    var table = document.getElementById("customers");
+    for (i = 0; i < close.length; i++) 
+    {
+    var row = table.insertRow(1);
+    var cell1 = row.insertCell(0);
+    var cell2 = row.insertCell(1);
+    var pro = "Hello";
+    cell1.innerHTML = pro;
+    cell2.innerHTML = "NEW CELL2";
+    }
+}
+    </script> -->
     </body>
 
     </html>
+    <div></div>
+    <a href="{{url_for('listed')}}">List Allergry Drug Ingredients</a>
+    <div></div>
+    <a href="{{url_for('camera')}}">Using camera</a>
+    <div></div>
     <a href="{{url_for('logout')}}">Logout</a>
-
     {% else %}
 
     <a href="{{url_for('login')}}">Sign in/Sign Up</a>
